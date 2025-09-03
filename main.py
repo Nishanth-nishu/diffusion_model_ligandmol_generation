@@ -799,7 +799,7 @@ class MolecularGenerationBenchmark:
             Descriptors.NumHDonors,
             Descriptors.NumRotatableBonds(mol),
             Descriptors.NumAromaticRings(mol),
-            Descriptors.FractionCsp3(mol),
+            MolecularFeatures.manual_fraction_csp3(mol),
             QED.qed(mol)
         ]
         
@@ -3455,7 +3455,7 @@ class MolecularPropertyPredictor:
                         Descriptors.NumHDonors(mol),
                         Descriptors.NumRotatableBonds(mol),
                         Descriptors.NumAromaticRings(mol),
-                        Descriptors.MolecularFeatures.manual_fraction_csp3(mol)
+                        MolecularFeatures.manual_fraction_csp3(mol)
                     ]
                     
                     features.append(desc)
