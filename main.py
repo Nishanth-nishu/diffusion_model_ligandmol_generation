@@ -112,7 +112,7 @@ class MolecularFeatures:
                 'aromatic_rings': Descriptors.NumAromaticRings(mol),
                 'qed': QED.qed(mol),
                 'bertz_ct': Descriptors.BertzCT(mol),
-                'fraction_csp3': MolecularFeatures.manual_fraction_csp3(mol),
+                'fraction_csp3': rdmd.CalcFractionCSP3(mol),
                 'num_heterocycles': Descriptors.NumHeterocycles(mol),
                 'molar_refractivity': Crippen.MolMR(mol),
                 'smiles': smiles
@@ -796,10 +796,10 @@ class MolecularGenerationBenchmark:
             Descriptors.MolLogP(mol),
             Descriptors.TPSA(mol),
             Descriptors.NumHAcceptors(mol),
-            Descriptors.NumHDonors,
+            Descriptors.NumHDonors(mol),
             Descriptors.NumRotatableBonds(mol),
             Descriptors.NumAromaticRings(mol),
-            MolecularFeatures.manual_fraction_csp3(mol),
+            rdmd.CalcFractionCSP3(mol),
             QED.qed(mol)
         ]
         
@@ -2590,7 +2590,7 @@ class ResearchStandardPreprocessor:
             'mw': (50, 1000),           # Molecular weight
             'logp': (-3, 8),            # LogP
             'tpsa': (0, 200),           # TPSA
-            'NumHAcceptors': (0, 15),    # H-bond acceptors # H-bond acceptors
+            'hba': (0, 15),    # H-bond acceptors # H-bond acceptors
             'hbd': (0, 8),              # H-bond donors
             'rotatable_bonds': (0, 15), # Rotatable bonds
             'aromatic_rings': (0, 6),   # Aromatic rings
@@ -3455,7 +3455,7 @@ class MolecularPropertyPredictor:
                         Descriptors.NumHDonors(mol),
                         Descriptors.NumRotatableBonds(mol),
                         Descriptors.NumAromaticRings(mol),
-                        MolecularFeatures.manual_fraction_csp3(mol)
+                        rdmd.CalcFractionCSP3(mol)
                     ]
                     
                     features.append(desc)
