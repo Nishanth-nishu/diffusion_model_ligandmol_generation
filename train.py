@@ -11,7 +11,6 @@ from tqdm import tqdm
 
 # Local imports from your other files
 from model import ResearchValidatedDiffusionModel
-from evaluation import ResearchValidatedLoss
 
 class ResearchValidatedTrainer:
     """Enhanced trainer with comprehensive debugging and error handling"""
