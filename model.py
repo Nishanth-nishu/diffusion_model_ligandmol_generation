@@ -601,3 +601,12 @@ class ResearchValidatedDiffusionModel(nn.Module):
         prop_pred = self.property_head(global_mean_pool(h, data.batch))
 
         return atom_pred, pos_pred, prop_pred, consistency_outputs
+
+def _add_missing_attributes_to_model(model):
+    """Add missing attributes to the diffusion model"""
+    
+    if not hasattr(model, 'posterior_variance'):
+        # Calculate posterior variance for DDPM
+        alphas_cumprod_prev = F.pad(model.alphas_cumprod[:-1], (1, 0), value=1.0)
+        posterior_variance = model.betas * (1.0 - alphas_cumprod_prev) / (1.0 - model.alphas_cumprod)
+        model.register_buffer('posterior_variance', posterior_variance)
