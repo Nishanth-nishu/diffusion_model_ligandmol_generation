@@ -9,6 +9,8 @@ from torch_geometric.nn import MessagePassing, global_add_pool, global_mean_pool
 from torch_geometric.utils import to_dense_batch
 from torch_geometric.data import Data
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(f"Using device: {device}")
 
 class EquivariantGraphTransformer(nn.Module):
     """
