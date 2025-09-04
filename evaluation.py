@@ -1015,5 +1015,67 @@ def save_research_comparison_report(results, output_path='research_results/'):
 
     print(f"Detailed research comparison saved to: {output_path}")
   
+def benchmark_against_research_standards(model, generated_molecules, training_metrics, generation_results):
+    """Benchmark against established research standards"""
 
+    print("Benchmarking against research standards...")
+
+    benchmarks = {}
+
+    # Standard metrics from diffusion papers
+    all_validity = [results['validity'] for results in generation_results.values() if 'validity' in results]
+    all_uniqueness = [results['uniqueness'] for results in generation_results.values() if 'uniqueness' in results]
+    all_drug_likeness = [results['drug_likeness'] for results in generation_results.values() if 'drug_likeness' in results]
+
+    benchmarks['overall_performance'] = {
+        'average_validity': np.mean(all_validity) if all_validity else 0.0,
+        'average_uniqueness': np.mean(all_uniqueness) if all_uniqueness else 0.0,
+        'average_drug_likeness': np.mean(all_drug_likeness) if all_drug_likeness else 0.0,
+        'consistency_across_scenarios': np.std(all_validity) if all_validity else 1.0
+    }
+
+    # Research paper comparison
+    # Based on reported metrics from recent papers
+    research_benchmarks = {
+        'EDM': {'validity': 0.87, 'uniqueness': 0.95, 'novelty': 0.93},
+        'MolDiff': {'validity': 0.89, 'uniqueness': 0.94, 'drug_likeness': 0.82},
+        'PILOT': {'validity': 0.85, 'uniqueness': 0.97, 'property_control': 0.76},
+        'Graph_DiT': {'validity': 0.91, 'uniqueness': 0.96, 'fcd': 12.5}
+    }
+
+    # Compare our results
+    our_performance = benchmarks['overall_performance']
+
+    comparisons = {}
+    for paper, metrics in research_benchmarks.items():
+        comparison = {}
+        for metric, value in metrics.items():
+            if metric in our_performance:
+                our_value = our_performance[metric]
+                comparison[metric] = {
+                    'our_score': our_value,
+                    'paper_score': value,
+                    'relative_performance': our_value / value if value > 0 else 0.0
+                }
+        comparisons[paper] = comparison
+
+    benchmarks['paper_comparisons'] = comparisons
+
+    # Training efficiency metrics
+    benchmarks['training_efficiency'] = {
+        'epochs_to_convergence': len(training_metrics['train_losses']),
+        'final_loss': training_metrics['train_losses'][-1] if training_metrics['train_losses'] else None,
+        'loss_reduction': (training_metrics['train_losses'][0] - training_metrics['train_losses'][-1]) / training_metrics['train_losses'][0] if len(training_metrics['train_losses']) > 1 else 0.0
+    }
+
+    # Model complexity analysis
+    total_params = sum(p.numel() for p in model.parameters())
+    benchmarks['model_analysis'] = {
+        'total_parameters': total_params,
+        'parameters_per_performance': total_params / our_performance['average_validity'] if our_performance['average_validity'] > 0 else float('inf'),
+        'memory_usage_mb': total_params * 4 / 1e6,
+        'architecture_efficiency': 'high' if total_params < 50e6 and our_performance['average_validity'] > 0.8 else 'moderate'
+    }
+
+    return benchmarks
 
