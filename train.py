@@ -12,6 +12,36 @@ from tqdm import tqdm
 # Local imports from your other files
 from model import ResearchValidatedDiffusionModel
 
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(f"Using device: {device}")
+
+def validate_model_components(model):
+    """Validate all model components have proper types"""
+    
+    print("Validating model components...")
+    
+    try:
+        # Check if all registered buffers are tensors
+        for name, buffer in model.named_buffers():
+            if not isinstance(buffer, torch.Tensor):
+                print(f"ERROR: Buffer {name} is {type(buffer)}, not tensor!")
+                return False
+            else:
+                print(f"✓ Buffer {name}: {buffer.shape}")
+        
+        # Check if all parameters are tensors
+        for name, param in model.named_parameters():
+            if not isinstance(param, torch.Tensor):
+                print(f"ERROR: Parameter {name} is {type(param)}, not tensor!")
+                return False
+        
+        print("Model component validation passed!")
+        return True
+        
+    except Exception as e:
+        print(f"Model validation failed: {e}")
+        return False
+
 class ResearchValidatedTrainer:
     """Enhanced trainer with comprehensive debugging and error handling"""
 
@@ -712,3 +742,5 @@ class ResearchValidatedLoss(nn.Module):
             'consistency_loss': consistency_loss,
             'valency_loss': valency_loss
         }
+
+
