@@ -1006,7 +1006,7 @@ class ResearchStandardPreprocessor:
         return torch.tensor(property_values, dtype=torch.float)
         return pd.DataFrame(filtered_data)
 
-  class EnhancedMolecularFeatures:
+class EnhancedMolecularFeatures:
     """Enhanced molecular features based on latest research"""
 
     @staticmethod
