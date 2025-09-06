@@ -42,6 +42,68 @@ logging.basicConfig(level=logging.INFO)
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Using device: {device}")
 
+
+def run_fixed_generation_testing(model):
+    """Run fixed generation testing"""
+
+    print("\nStep 6: Research-standard generation testing...")
+
+    # Add missing attributes to model
+    _add_missing_attributes_to_model(model)
+
+    # Load best model for generation
+    best_model_path = 'research_checkpoints/model_best.pt'
+    if os.path.exists(best_model_path):
+        try:
+            checkpoint = torch.load(best_model_path, map_location=device)
+            model.load_state_dict(checkpoint['model_state_dict'])
+            print("Loaded best model checkpoint")
+        except Exception as e:
+            print(f"Could not load checkpoint: {e}, using current model")
+
+    generator = ResearchValidatedGenerator(model, use_ema=False)
+
+    # Get fixed generation scenarios
+    generation_scenarios = get_fixed_generation_scenarios()
+
+    all_generated = []
+    generation_results = {}
+
+    for scenario in generation_scenarios:
+        print(f"\nGenerating {scenario['name']} molecules...")
+
+        try:
+            generated = generator.generate_with_research_protocols(
+                num_molecules=100,  # Reduced for faster testing
+                target_properties=scenario['properties'],
+                guidance_scale=scenario['guidance'],
+                num_sampling_steps=20,  # Reduced for speed
+                temperature=0.8,
+                use_ddim=True
+            )
+
+            # Evaluate scenario-specific metrics
+            if generated:
+                scenario_results = generator.benchmark.benchmark_full_suite(
+                    generated, None, None
+                )
+
+                generation_results[scenario['name']] = scenario_results
+                all_generated.extend(generated)
+
+                print(f"  Generated: {len(generated)} molecules")
+                print(f"  Validity: {scenario_results.get('validity', 0.0):.3f}")
+                print(f"  Drug-likeness: {scenario_results.get('drug_likeness', 0.0):.3f}")
+            else:
+                print(f"  No molecules generated for {scenario['name']}")
+                generation_results[scenario['name']] = {'validity': 0.0, 'drug_likeness': 0.0, 'uniqueness': 0.0}
+
+        except Exception as e:
+            print(f"  Generation failed for {scenario['name']}: {e}")
+            generation_results[scenario['name']] = {'validity': 0.0, 'drug_likeness': 0.0, 'uniqueness': 0.0}
+
+    return generation_results, all_generated
+
 def run_research_validated_training(
     target_molecules=100000,
     num_epochs=50,
@@ -49,7 +111,7 @@ def run_research_validated_training(
     test_generalization=True,
     debug_mode=False,
 ):
-    """Complete research-validated training workflow"""
+    """Fixed training workflow - replace your existing function with this"""
 
     print("=" * 80)
     print("RESEARCH-VALIDATED MOLECULAR DIFFUSION MODEL")
@@ -61,19 +123,25 @@ def run_research_validated_training(
 
     if use_real_chembl:
         try:
+            from data_utils import ResearchValidatedDataCollector
             collector = ResearchValidatedDataCollector()
             df_molecules = collector.collect_with_progressive_fallback(target_molecules)
         except Exception as e:
             print(f"ChEMBL collection failed: {e}")
             print("Falling back to research-validated synthetic data...")
+            from data_utils import ResearchValidatedDataCollector
             collector = ResearchValidatedDataCollector()
             df_molecules = collector.collect_with_progressive_fallback(target_molecules)
     else:
+        from data_utils import ResearchValidatedDataCollector
         collector = ResearchValidatedDataCollector()
         df_molecules = collector.collect_with_progressive_fallback(target_molecules)
 
     # Step 2: Research-standard preprocessing
     print("\nStep 2: Research-standard molecular preprocessing...")
+    from data_utils import ResearchStandardPreprocessor, MolecularFeatures
+    from rdkit import Chem
+    
     preprocessor = ResearchStandardPreprocessor()
 
     processed_molecules = []
@@ -118,6 +186,7 @@ def run_research_validated_training(
 
     # Step 3: Research-standard data splitting
     print("\nStep 3: Research-standard data splitting...")
+    from torch_geometric.data import DataLoader
 
     # Stratified split ensuring diverse representation
     train_size = int(0.8 * len(processed_molecules))
@@ -135,7 +204,7 @@ def run_research_validated_training(
     # Research-optimized data loaders
     train_loader = DataLoader(
         train_molecules,
-        batch_size=16,  # Research-validated batch size for molecular diffusion
+        batch_size=16,
         shuffle=True,
         num_workers=0,
         pin_memory=torch.cuda.is_available(),
@@ -164,18 +233,19 @@ def run_research_validated_training(
 
     # Step 4: Initialize research-validated model
     print("\nStep 4: Initializing research-validated model...")
+    from model import ResearchValidatedDiffusionModel
 
     model = ResearchValidatedDiffusionModel(
-        atom_feature_dim=119,        # Full atom type support
+        atom_feature_dim=119,
         edge_feature_dim=5,
-        hidden_dim=256,              # Research-optimal size
-        num_layers=8,                # Deep enough for complex patterns
-        num_heads=8,                 # Multi-head attention
-        timesteps=1000,              # Standard timesteps
-        property_dim=15,             # Comprehensive properties
-        use_equivariance=True,       # EDM-style equivariance
-        use_consistency=True,        # MolDiff consistency
-        use_multi_objective=True     # PILOT multi-objective
+        hidden_dim=256,
+        num_layers=8,
+        num_heads=8,
+        timesteps=1000,
+        property_dim=15,
+        use_equivariance=True,
+        use_consistency=True,
+        use_multi_objective=True
     )
 
     total_params = sum(p.numel() for p in model.parameters())
@@ -183,15 +253,16 @@ def run_research_validated_training(
 
     # Step 5: Research-validated training
     print("\nStep 5: Research-validated training...")
+    from train import ResearchValidatedTrainer
 
     trainer = ResearchValidatedTrainer(
         model=model,
         train_loader=train_loader,
         val_loader=val_loader,
         test_loader=test_loader,
-        lr=1e-4,                     # Research-validated learning rate
-        weight_decay=1e-6,           # Minimal weight decay
-        ema_decay=0.9999,            # EMA for stable generation
+        lr=1e-4,
+        weight_decay=1e-6,
+        ema_decay=0.9999,
         gradient_clip=1.0,
         debug_mode=debug_mode
     )
@@ -202,39 +273,55 @@ def run_research_validated_training(
         validation_frequency=3
     )
 
-    # Step 6: Research-standard generation testing
-    generation_results, all_generated = run_fixed_generation_testing(model)
+    # Step 6: Research-standard generation testing - FIXED CALL
+    print("\nStep 6: Starting generation testing...")
+    try:
+        generation_results, all_generated = run_fixed_generation_testing(model)
+    except Exception as e:
+        print(f"Generation testing failed: {e}")
+        generation_results = {
+            'Kinase Inhibitors': {'validity': 0.0, 'drug_likeness': 0.0, 'uniqueness': 0.0},
+            'CNS Drugs': {'validity': 0.0, 'drug_likeness': 0.0, 'uniqueness': 0.0},
+            'Fragment-like': {'validity': 0.0, 'drug_likeness': 0.0, 'uniqueness': 0.0}
+        }
+        all_generated = []
 
     # Step 7: Cross-dataset generalization testing
     if test_generalization:
         print("\nStep 7: Cross-dataset generalization testing...")
+        try:
+            from evaluation import CrossDatasetValidation
+            cross_validator = CrossDatasetValidation()
 
-        cross_validator = CrossDatasetValidation()
+            # Test on ZINC-like molecules
+            zinc_results = cross_validator.test_zinc_generalization(model, 500)
+            pubchem_results = cross_validator.test_pubchem_generalization(model, 500)
 
-        # Test on ZINC-like molecules
-        zinc_results = cross_validator.test_zinc_generalization(model, 500)
+            generation_results['ZINC_generalization'] = zinc_results
+            generation_results['PubChem_generalization'] = pubchem_results
+        except Exception as e:
+            print(f"Generalization testing failed: {e}")
 
-        # Test on PubChem-like diversity
-        pubchem_results = cross_validator.test_pubchem_generalization(model, 500)
-
-        generation_results['ZINC_generalization'] = zinc_results
-        generation_results['PubChem_generalization'] = pubchem_results
-
-    # Step 8: Comprehensive benchmarking against research standards
+    # Step 8: Comprehensive benchmarking
     print("\nStep 8: Comprehensive benchmarking...")
+    try:
+        from evaluation import benchmark_against_research_standards
+        benchmark_results = benchmark_against_research_standards(
+            model, all_generated, training_metrics, generation_results
+        )
+    except Exception as e:
+        print(f"Benchmarking failed: {e}")
+        
 
-    benchmark_results = benchmark_against_research_standards(
-        model, all_generated, training_metrics, generation_results
-    )
-
-    # Step 9: Create research-quality visualizations
+    # Step 9: Create visualizations
     print("\nStep 9: Creating research-quality visualizations...")
+    try:
+        from evaluation import create_research_visualizations
+        create_research_visualizations(training_metrics, generation_results, benchmark_results)
+    except Exception as e:
+        print(f"Visualization creation failed: {e}")
 
-    create_research_visualizations(
-        training_metrics, generation_results, benchmark_results
-    )
-
-    # Step 10: Save comprehensive research results
+    # Step 10: Save results
     print("\nStep 10: Saving research results...")
 
     research_results = {
@@ -262,6 +349,7 @@ def run_research_validated_training(
     torch.save(research_results, 'research_results/complete_research_results.pt')
 
     # Save human-readable summary
+    import json
     with open('research_results/research_summary.json', 'w') as f:
         summary = {
             'model_performance': benchmark_results,
@@ -279,7 +367,6 @@ def run_research_validated_training(
     print(f"Results saved to: research_results/")
 
     return model, research_results
-
 
 def main_research_validated():
     """Main execution following research best practices"""
@@ -300,7 +387,7 @@ def main_research_validated():
         print("\nRunning Quick Research Test...")
         model, results = run_research_validated_training(
             target_molecules=5000,
-            num_epochs=2,
+            num_epochs=1,
             use_real_chembl=True,
             test_generalization=True
         )
