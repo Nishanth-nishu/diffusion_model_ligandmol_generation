@@ -1,4 +1,5 @@
 import logging
+logging.getLogger("chembl_webresource_client").setLevel(logging.ERROR)
 
 # Third-party imports for data handling and molecular science
 import numpy as np

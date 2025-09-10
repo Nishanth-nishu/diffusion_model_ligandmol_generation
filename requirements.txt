@@ -1,0 +1,5 @@
+torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+torch-geometric
+torch-scatter torch-sparse torch-cluster torch-spline-conv -f https://data.pyg.org/whl/torch-2.1.0+cu118.html
+rdkit chembl-webresource-client
+pandas numpy matplotlib seaborn tqdm scikit-learn
