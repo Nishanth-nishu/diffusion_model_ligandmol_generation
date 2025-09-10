@@ -23,7 +23,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import r2_score, mean_absolute_error
 import logging
 from rdkit.Chem import QED
-from model import ResearchValidatedDiffusionModel, _add_missing_attributes_to_model
+from model import ResearchValidatedDiffusionModel, _add_missing_attributes_to_model, ensure_model_has_all_buffers
 from data_utils import ResearchValidatedDataCollector, ResearchStandardPreprocessor, MolecularFeatures
 from train import ResearchValidatedTrainer, ResearchValidatedLoss
 from generation import ResearchValidatedGenerator, get_fixed_generation_scenarios
