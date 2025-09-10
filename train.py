@@ -372,7 +372,8 @@ class ResearchValidatedTrainer:
     def save_checkpoint(self, epoch, suffix):
         """Save checkpoint"""
         os.makedirs('research_checkpoints', exist_ok=True)
-
+        from model import ensure_model_has_all_buffers
+        ensure_model_has_all_buffers(self.model)
         checkpoint = {
             'epoch': epoch,
             'model_state_dict': self.model.state_dict(),
@@ -393,6 +394,9 @@ class ResearchValidatedTrainer:
         
         if self.debug_mode:
             print(f"Checkpoint saved: model_{suffix}.pt")
+            buffer_keys = [k for k in checkpoint['model_state_dict'].keys() if 'alphas' in k or 'betas' in k or 'variance' in k]
+            print(f"Saved buffers: {buffer_keys}")
+
 
 
 class ResearchValidatedLoss(nn.Module):
