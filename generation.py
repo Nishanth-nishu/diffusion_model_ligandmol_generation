@@ -670,7 +670,9 @@ class ResearchValidatedGenerator:
 
 def _add_missing_attributes_to_model(model):
     """Add missing attributes to the diffusion model for generation compatibility"""
-    
+
+    from model import ensure_model_has_all_buffers
+    ensure_model_has_all_buffers(model)
     if not hasattr(model, 'posterior_variance'):
         # Calculate posterior variance for DDPM
         alphas_cumprod_prev = F.pad(model.alphas_cumprod[:-1], (1, 0), value=1.0)
@@ -759,127 +761,91 @@ def get_fixed_generation_scenarios():
 
 
 def run_fixed_generation_testing(model):
-    """
-    Run research-compliant generation testing using ONLY trained model outputs
+    """Run fixed generation testing with proper model loading"""
+    from model import ensure_model_has_all_buffers, load_model_with_missing_buffers
     
-    Key research principles:
-    - NO random or dummy values anywhere
-    - Only legitimate molecules from trained model
-    - Validates against chemical principles
-    - Uses ground truth molecular properties
-    - Follows EDM+MolDiff+PILOT specifications
-    """
+    print("\nStep 6: Research-standard generation testing...")
     
-    print("\nStep 6: Research-standard generation testing (trained model only)...")
+    # First ensure model has all required buffers
+    ensure_model_has_all_buffers(model)
     
-    # Ensure model has all required attributes for generation
-    _add_missing_attributes_to_model(model)
-    
-    # Load best model checkpoint if available
+    # Try to load best model checkpoint
     best_model_path = 'research_checkpoints/model_best.pt'
     if os.path.exists(best_model_path):
-        try:
-            checkpoint = torch.load(best_model_path, map_location=device)
-            model.load_state_dict(checkpoint['model_state_dict'])
-            print(" Loaded best model checkpoint for generation")
-        except Exception as e:
-            print(f"⚠ Could not load checkpoint: {e}, using current model state")
+        print(f"Loading checkpoint: {best_model_path}")
+        success = load_model_with_missing_buffers(model, best_model_path, device)
+        if not success:
+            print("Using current model state instead")
+    else:
+        print("No checkpoint found, using current model state")
     
-    # Create research-compliant generator
+    # Ensure all buffers are present after loading
+    ensure_model_has_all_buffers(model)
+    
     generator = ResearchValidatedGenerator(model, use_ema=False)
     
-    # Get ground truth generation scenarios
+    # Get fixed generation scenarios
     generation_scenarios = get_fixed_generation_scenarios()
     
     all_generated = []
     generation_results = {}
     
     for scenario in generation_scenarios:
-        print(f"\n🧬 Generating {scenario['name']} molecules...")
+        print(f"\nGenerating {scenario['name']} molecules...")
         
         try:
-            # Generate molecules using research protocols
             generated = generator.generate_with_research_protocols(
-                num_molecules=50,  # Reasonable number for validation
+                num_molecules=50,  # Reduced for faster testing
                 target_properties=scenario['properties'],
                 guidance_scale=scenario['guidance'],
-                num_sampling_steps=50,  # Research-standard sampling steps
-                temperature=0.8,        # Balanced exploration/exploitation
-                use_ddim=True          # DDIM for deterministic generation
+                num_sampling_steps=20,  # Reduced for speed
+                temperature=0.8,
+                use_ddim=True
             )
             
-            # Evaluate with research-compliant metrics
-            if generated:
+            # Evaluate scenario-specific metrics if molecules were generated
+            if generated and len(generated) > 0:
                 try:
-                    # Use benchmark for evaluation
                     scenario_results = generator.benchmark.benchmark_full_suite(
                         generated, None, None
                     )
+                    generation_results[scenario['name']] = scenario_results
+                    all_generated.extend(generated)
                     
-                    # Add scenario-specific metrics
-                    scenario_results['generated_count'] = len(generated)
-                    scenario_results['research_compliant'] = True
-                    scenario_results['scenario_name'] = scenario['name']
-                    
-                except Exception as benchmark_error:
-                    print(f" Benchmark evaluation failed: {benchmark_error}")
-                    # Calculate basic metrics manually
-                    scenario_results = calculate_research_compliant_metrics(generated)
-                
-                generation_results[scenario['name']] = scenario_results
-                all_generated.extend(generated)
-                
-                # Report results
-                validity = scenario_results.get('validity', 0.0)
-                drug_likeness = scenario_results.get('drug_likeness', 0.0)
-                uniqueness = scenario_results.get('uniqueness', 0.0)
-                
-                print(f"   Generated: {len(generated)} molecules")
-                print(f"   Validity: {validity:.3f}")
-                print(f"   Drug-likeness: {drug_likeness:.3f}")
-                print(f"   Uniqueness: {uniqueness:.3f}")
-                
-                # Validate against expected property ranges
-                if 'expected_mw_range' in scenario:
-                    expected_mw = scenario['expected_mw_range']
-                    print(f"   Expected MW range: {expected_mw[0]}-{expected_mw[1]} Da")
-                
+                    print(f"  Generated: {len(generated)} molecules")
+                    print(f"  Validity: {scenario_results.get('validity', 0.0):.3f}")
+                    print(f"  Drug-likeness: {scenario_results.get('drug_likeness', 0.0):.3f}")
+                except Exception as eval_error:
+                    print(f"  Evaluation failed: {eval_error}")
+                    generation_results[scenario['name']] = {
+                        'validity': 0.0, 
+                        'drug_likeness': 0.0, 
+                        'uniqueness': 0.0,
+                        'generated_count': len(generated)
+                    }
+                    all_generated.extend(generated)
             else:
                 print(f"  No molecules generated for {scenario['name']}")
-                # Report actual failure (NO dummy values)
                 generation_results[scenario['name']] = {
-                    'validity': 0.0,
-                    'drug_likeness': 0.0,
+                    'validity': 0.0, 
+                    'drug_likeness': 0.0, 
                     'uniqueness': 0.0,
-                    'generated_count': 0,
-                    'research_compliant': False,
-                    'failure_reason': 'Model failed to generate valid molecules'
+                    'generated_count': 0
                 }
                 
         except Exception as e:
             print(f"  Generation failed for {scenario['name']}: {e}")
-            # Report actual error (NO dummy values)
+            import traceback
+            traceback.print_exc()
             generation_results[scenario['name']] = {
-                'validity': 0.0,
+                'validity': 0.0, 
                 'drug_likeness': 0.0, 
                 'uniqueness': 0.0,
                 'generated_count': 0,
-                'research_compliant': False,
                 'error': str(e)
             }
     
-    # Summary statistics
-    total_generated = len(all_generated)
-    successful_scenarios = sum(1 for r in generation_results.values() 
-                              if r.get('generated_count', 0) > 0)
-    
-    print(f"\n📈 GENERATION SUMMARY:")
-    print(f"   Total molecules generated: {total_generated}")
-    print(f"   Successful scenarios: {successful_scenarios}/{len(generation_scenarios)}")
-    print(f"   Overall success rate: {successful_scenarios/len(generation_scenarios)*100:.1f}%")
-    
     return generation_results, all_generated
-
 
 def calculate_research_compliant_metrics(generated_molecules):
     """
