@@ -894,20 +894,7 @@ def _add_missing_attributes_to_model(model):
     Add missing diffusion model attributes for compatibility
     Ensures all required buffers exist for sampling algorithms
     """
-    if not hasattr(model, 'posterior_variance'):
-        # Calculate posterior variance for DDPM sampling
-        alphas_cumprod_prev = F.pad(model.alphas_cumprod[:-1], (1, 0), value=1.0)
-        posterior_variance = model.betas * (1.0 - alphas_cumprod_prev) / (1.0 - model.alphas_cumprod)
-        model.register_buffer('posterior_variance', posterior_variance)
-
-    # EDM: Ensure all required sampling buffers exist
-    if not hasattr(model, 'sqrt_alphas'):
-        model.register_buffer('sqrt_alphas', torch.sqrt(model.alphas))
-    
-    if not hasattr(model, 'sqrt_one_minus_alphas'):
-        model.register_buffer('sqrt_one_minus_alphas', torch.sqrt(1.0 - model.alphas))
-
-
+    ensure_model_has_all_buffers(model)
 # Test function to verify research compliance
 def test_research_compliance():
     """
@@ -995,6 +982,92 @@ def test_research_compliance():
         print(f"---Research compliance test failed: {e}")
         import traceback
         traceback.print_exc()
+        return False
+
+def ensure_model_has_all_buffers(model):
+    """
+    Ensure the model has all required buffers for generation
+    This fixes the missing buffer error when loading checkpoints
+    """
+    # Check and add sqrt_alphas
+    if not hasattr(model, 'sqrt_alphas') or model.sqrt_alphas is None:
+        model.register_buffer('sqrt_alphas', torch.sqrt(model.alphas))
+    
+    # Check and add sqrt_one_minus_alphas  
+    if not hasattr(model, 'sqrt_one_minus_alphas') or model.sqrt_one_minus_alphas is None:
+        model.register_buffer('sqrt_one_minus_alphas', torch.sqrt(1.0 - model.alphas))
+    
+    # Check and add posterior_variance
+    if not hasattr(model, 'posterior_variance') or model.posterior_variance is None:
+        alphas_cumprod_prev = F.pad(model.alphas_cumprod[:-1], (1, 0), value=1.0)
+        posterior_variance = model.betas * (1.0 - alphas_cumprod_prev) / (1.0 - model.alphas_cumprod)
+        model.register_buffer('posterior_variance', posterior_variance)
+
+def load_model_with_missing_buffers(model, checkpoint_path, device):
+    """
+    Load model checkpoint and handle missing buffer attributes gracefully
+    """
+    try:
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+        
+        # Get the saved state dict
+        saved_state_dict = checkpoint['model_state_dict']
+        
+        # Get the current model's state dict
+        current_state_dict = model.state_dict()
+        
+        # Find missing keys in the checkpoint
+        missing_keys = []
+        for key in current_state_dict:
+            if key not in saved_state_dict:
+                missing_keys.append(key)
+        
+        if missing_keys:
+            print(f"Missing keys in checkpoint: {missing_keys}")
+            print("Computing missing buffers...")
+            
+            # Add missing buffers to the saved state dict
+            if 'sqrt_alphas' in missing_keys:
+                if 'alphas' in saved_state_dict:
+                    saved_state_dict['sqrt_alphas'] = torch.sqrt(saved_state_dict['alphas'])
+                else:
+                    # Fallback: compute from betas if available
+                    if 'betas' in saved_state_dict:
+                        alphas = 1.0 - saved_state_dict['betas']
+                        saved_state_dict['sqrt_alphas'] = torch.sqrt(alphas)
+                    else:
+                        print("Warning: Cannot compute sqrt_alphas, using default")
+                        saved_state_dict['sqrt_alphas'] = torch.sqrt(torch.ones_like(model.alphas))
+            
+            if 'sqrt_one_minus_alphas' in missing_keys:
+                if 'alphas' in saved_state_dict:
+                    saved_state_dict['sqrt_one_minus_alphas'] = torch.sqrt(1.0 - saved_state_dict['alphas'])
+                else:
+                    if 'betas' in saved_state_dict:
+                        alphas = 1.0 - saved_state_dict['betas']
+                        saved_state_dict['sqrt_one_minus_alphas'] = torch.sqrt(1.0 - alphas)
+                    else:
+                        print("Warning: Cannot compute sqrt_one_minus_alphas, using default")
+                        saved_state_dict['sqrt_one_minus_alphas'] = torch.sqrt(1.0 - model.alphas)
+            
+            if 'posterior_variance' in missing_keys:
+                if 'alphas_cumprod' in saved_state_dict and 'betas' in saved_state_dict:
+                    alphas_cumprod = saved_state_dict['alphas_cumprod']
+                    betas = saved_state_dict['betas']
+                    alphas_cumprod_prev = F.pad(alphas_cumprod[:-1], (1, 0), value=1.0)
+                    posterior_variance = betas * (1.0 - alphas_cumprod_prev) / (1.0 - alphas_cumprod)
+                    saved_state_dict['posterior_variance'] = posterior_variance
+                else:
+                    print("Warning: Cannot compute posterior_variance, using default")
+                    saved_state_dict['posterior_variance'] = model.posterior_variance
+        
+        # Load the updated state dict
+        model.load_state_dict(saved_state_dict, strict=False)
+        print(f"Successfully loaded checkpoint: {checkpoint_path}")
+        return True
+        
+    except Exception as e:
+        print(f"Failed to load checkpoint {checkpoint_path}: {e}")
         return False
 
 
